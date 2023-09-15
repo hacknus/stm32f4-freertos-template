@@ -1,0 +1,40 @@
+[package]
+name = "stm32f4-freertos-template"
+version = "0.1.0"
+edition = "2021"
+
+[profile.release]
+opt-level = "s"
+lto = true
+debug = true
+codegen-units = 1
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[build-dependencies]
+freertos-cargo-build = "*"
+
+[dependencies]
+embedded-hal = "0.2"
+nb = "1"
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+# Panic behaviour, see https://crates.io/keywords/panic-impl for alternatives
+rtt-target = { version = "0.3.1", features = ["cortex-m"] }
+usb-device = "0.2.9"
+usbd-serial = "0.1.1"
+arrform = "0.1.1"
+freertos-rust = "*"
+micromath = "2.0.0"
+modular-bitfield = "0.11.2"
+shift-register-driver = { branch = "latch_inverted", git = "https://github.com/hacknus/shift-register-driver"}
+# shift-register-driver = { branch = "master", git = "https://github.com/hacknus/shift-register-driver"}
+shared-bus = { version = "0.3.0", features = ["cortex-m"] }
+shared-pin = {git = "https://github.com/hacknus/shared-pin-rs"}
+ads122x04 = {git = "https://github.com/hacknus/ads122x04-rs"}
+tmc5160 = {git = "https://github.com/hacknus/tmc5160-rs"}
+
+[dependencies.stm32f4xx-hal]
+version = "0.15.0"
+# git = "https://github.com/stm32-rs/stm32f4xx-hal"
+features = ["rt", "stm32f405", "usb_fs"] # replace the model of your microcontroller here
+
