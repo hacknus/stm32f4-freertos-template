@@ -11,7 +11,7 @@ use alloc::sync::Arc;
 use core::panic::PanicInfo;
 
 use arrform::{arrform, ArrForm};
-use cortex_m::asm;
+use cortex_m::{asm, singleton};
 use cortex_m_rt::exception;
 use cortex_m_rt::{entry, ExceptionFrame};
 use freertos_rust::*;
@@ -35,18 +35,15 @@ use stm32f4xx_hal::{
     pac::{self, Interrupt},
     prelude::*,
 };
-use stm32f4xx_hal::{
-    gpio::{PB6, PB7},
-    i2c::{I2c, Mode as i2cMode},
-    pac::I2C1,
-};
+
 
 use crate::devices::led::LED;
 use crate::usb::{usb_init, usb_println, usb_read};
-
+use crate::uart_dma::BUFFER_SIZE;
 mod devices;
 mod intrpt;
 mod usb;
+mod uart_dma;
 
 static mut SHUTDOWN: bool = false;
 
@@ -89,10 +86,6 @@ fn main() -> ! {
     let gpioc = dp.GPIOC.split();
     let gpiod = dp.GPIOD.split();
     let gpioe = dp.GPIOE.split();
-
-    // initialize DMA
-    let dma_streams_2 = StreamsTuple::new(dp.DMA2);
-    let dma_streams_1 = StreamsTuple::new(dp.DMA1);
 
     // initialize pins
     let mut _uart3_rede = gpiod.pd12.into_push_pull_output();
@@ -149,18 +142,30 @@ fn main() -> ! {
     )
         .unwrap();
 
-    // let uart_buffer = cortex_m::singleton!(: [u8; 2] = [0; 2]).unwrap();
-    // let mut transfer_uart3 = Transfer::init_memory_to_peripheral(
-    //     dma_streams_1.4,
-    //     uart3_tx,
-    //     uart_buffer,
-    //     None,
-    //     DmaConfig::default()
-    //         .memory_increment(true)
-    //         .fifo_enable(true)
-    //         .fifo_error_interrupt(true)
-    //         .transfer_complete_interrupt(true),
-    // );
+    let (mut tx, mut rx)  = uart3.split();
+    let dma1 = StreamsTuple::new(dp.DMA1);
+    rx.listen_idle();
+
+    // Note! It is better to use memory pools, such as heapless::pool::Pool. But it not work with embedded_dma yet.
+    // See CHANGELOG of unreleased main branch and issue https://github.com/japaric/heapless/pull/362 for details.
+    let rx_buffer1 = cortex_m::singleton!(: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE]).unwrap();
+    let rx_buffer2 = cortex_m::singleton!(: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE]).unwrap();
+
+    // Initialize and start DMA stream
+    let mut rx_transfer = Transfer::init_peripheral_to_memory(
+        dma1.1,
+        rx,
+        rx_buffer1,
+        None,
+        DmaConfig::default()
+            .memory_increment(true)
+            .fifo_enable(true)
+            .fifo_error_interrupt(true)
+            .transfer_complete_interrupt(true),
+    );
+
+    rx_transfer.start(|_rx| {});
+
 
 
 
@@ -180,14 +185,14 @@ fn main() -> ! {
     delay.delay(100.millis());
 
     Task::new()
-        .name("CRYO TASK")
+        .name("UART TASK")
         .stack_size(512)
         .priority(TaskPriority(3))
         .start(move || {
             CurrentTask::delay(Duration::ms(5000));
 
             // initialize TMC5160 stepper driver
-            usb_println("setting up cryo");
+            usb_println("running uart");
 
             // let mut turbo = TC400::new(&mut uart3);
 
